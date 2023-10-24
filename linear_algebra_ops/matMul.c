@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <CL/cl.h>
 
-#define MATRIX_SIZE 10
+#define MATRIX_SIZE 4
 
 // Function to read the content of a file into a string
 const char* readKernelSourceFromFile(const char* filename) {
@@ -56,7 +56,7 @@ int main() {
     // Initialize input vectors
     for (int i = 0; i < MATRIX_SIZE*MATRIX_SIZE; i++) {
         a[i] = i;
-        b[i] = 2 * i;
+        b[i] = i;
     }
 
     // Output vector

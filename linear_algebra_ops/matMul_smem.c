@@ -1,95 +1,143 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <CL/cl.h>
 
-#define MATRIX_SIZE 10
-
-const char* kernelSource =
-    "__kernel void matMul(__global const float* a, __global const float* b, __global float* result) {\n"
-    "    int row = get_global_id(0);\n"
-    "    int col = get_global_id(1);\n"
-    "    float sum = 0.0f;\n"
-    "    for (int i = 0; i < 10; i++){\n"
-    "        sum += a[row * 10 + i] * b[i * 10 + col];\n"
-    "    }\n"
-    "    result[row * 10 + col] = sum;\n"
-    "}\n";
-
+#define MATRIX_SIZE 4 // Adjust as needed
+#define TILE_SIZE 2    // Adjust the tile size as needed
 
 int main() {
-    // Input vectors
-    float a[MATRIX_SIZE*MATRIX_SIZE], b[MATRIX_SIZE*MATRIX_SIZE];
-
-    // Initialize input vectors
-    for (int i = 0; i < MATRIX_SIZE*MATRIX_SIZE; i++) {
-        a[i] = i;
-        b[i] = 2 * i;
-    }
-
-    // Output vector
-    float result[MATRIX_SIZE*MATRIX_SIZE];
-
-    // Load the OpenCL platform
+    // Load OpenCL platform and create a context
     cl_platform_id platform;
     clGetPlatformIDs(1, &platform, NULL);
-
-    // Load the OpenCL device (GPU in this case)
+    
     cl_device_id device;
     clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device, NULL);
-
-    // Create an OpenCL context
     cl_context context = clCreateContext(NULL, 1, &device, NULL, NULL, NULL);
 
     // Create a command queue
     cl_command_queue queue = clCreateCommandQueue(context, device, 0, NULL);
 
-    // Create and compile the OpenCL program
-    cl_program program = clCreateProgramWithSource(context, 1, &kernelSource, NULL, NULL);
-    clBuildProgram(program, 1, &device, NULL, NULL, NULL);
+    // Load and compile the OpenCL kernel
+    FILE* kernelFile = fopen("matMul_smem.cl", "r");
+    if (!kernelFile) {
+        printf("Failed to open kernel source file.\n");
+        return 1;
+    }
+    char* source = (char*)malloc(10000);
+    size_t sourceSize = fread(source, 1, 10000, kernelFile);
+    fclose(kernelFile);
 
-    // Create the OpenCL kernel
-    cl_kernel kernel = clCreateKernel(program, "matMul", NULL);
+    
+    cl_program program = clCreateProgramWithSource(context, 1, (const char**)&source, &sourceSize, NULL);
+    // clBuildProgram(program, 1, &device, NULL, NULL, NULL);
+    cl_int buildStatus = clBuildProgram(program, 1, &device, NULL, NULL, NULL);
+    if (buildStatus != CL_SUCCESS) {
+    // Get the size of the build log
+    size_t logSize;
+    clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 0, NULL, &logSize);
 
-    // Create OpenCL buffers for vectors
-    cl_mem bufferA = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * MATRIX_SIZE* MATRIX_SIZE, NULL, NULL);
-    cl_mem bufferB = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * MATRIX_SIZE* MATRIX_SIZE, NULL, NULL);
-    cl_mem bufferResult = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * MATRIX_SIZE* MATRIX_SIZE, NULL, NULL);
+    // Allocate memory for the build log
+    char* buildLog = (char*)malloc(logSize);
 
-    // Write data to the OpenCL buffers
-    clEnqueueWriteBuffer(queue, bufferA, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE* MATRIX_SIZE, a, 0, NULL, NULL);
-    clEnqueueWriteBuffer(queue, bufferB, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE* MATRIX_SIZE, b, 0, NULL, NULL);
+    // Get the build log
+    clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, logSize, buildLog, NULL);
 
+    // Print the build log or handle the errors as needed
+    printf("Build log:\n%s\n", buildLog);
+
+    free(buildLog);
+    }
+
+
+    cl_kernel kernel = clCreateKernel(program, "matrixMultiplication", NULL);
+
+    // Create input and output matrices, and allocate memory
+    float* A = (float*)malloc(MATRIX_SIZE * MATRIX_SIZE * sizeof(float));
+    float* B = (float*)malloc(MATRIX_SIZE * MATRIX_SIZE * sizeof(float));
+    float* C = (float*)malloc(MATRIX_SIZE * MATRIX_SIZE * sizeof(float));
+    float* C_h = (float*)malloc(MATRIX_SIZE * MATRIX_SIZE * sizeof(float));
+    int matrixSize = MATRIX_SIZE;
+    int tileSize = TILE_SIZE;
+    
+    // Initialize A and B matrices (you can replace this with your data)
+    for (int i = 0; i < MATRIX_SIZE*MATRIX_SIZE; i++) {
+        A[i] = i;
+        B[i] = i;
+    }
+
+    // Multiply the above 2 matrices using C++
+    for (int i = 0; i < MATRIX_SIZE; i++) {
+        for (int j = 0; j < MATRIX_SIZE; j++) {
+            float sum = 0.0f;
+            for (int k = 0; k < MATRIX_SIZE; k++) {
+                sum += A[i * MATRIX_SIZE + k] * B[k * MATRIX_SIZE + j];
+            }
+            C_h[i * MATRIX_SIZE + j] = sum;
+        }
+    }
+
+
+    // Create buffer objects for input and output matrices
+    cl_mem bufferA = clCreateBuffer(context, CL_MEM_READ_ONLY, MATRIX_SIZE * MATRIX_SIZE * sizeof(float), NULL, NULL);
+    cl_mem bufferB = clCreateBuffer(context, CL_MEM_READ_ONLY, MATRIX_SIZE * MATRIX_SIZE * sizeof(float), NULL, NULL);
+    cl_mem bufferC = clCreateBuffer(context, CL_MEM_WRITE_ONLY, MATRIX_SIZE * MATRIX_SIZE * sizeof(float), NULL, NULL);
+
+    clEnqueueWriteBuffer(queue, bufferA, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE* MATRIX_SIZE, A, 0, NULL, NULL);
+    clEnqueueWriteBuffer(queue, bufferB, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE* MATRIX_SIZE, B, 0, NULL, NULL);
+    
     // Set kernel arguments
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &bufferA);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &bufferB);
-    clSetKernelArg(kernel, 2, sizeof(cl_mem), &bufferResult);
+    clSetKernelArg(kernel, 2, sizeof(cl_mem), &bufferC);
+    clSetKernelArg(kernel, 3, sizeof(int), &matrixSize);
+    clSetKernelArg(kernel, 4, sizeof(int), &tileSize);
+    
 
-    // Enqueue the OpenCL kernel for execution
-    size_t globalWorkSize[2] = {MATRIX_SIZE, MATRIX_SIZE};
+    // Execute the kernel
+    size_t globalWorkSize[2] = { MATRIX_SIZE, MATRIX_SIZE };
+    size_t localWorkSize[2] = { TILE_SIZE, TILE_SIZE };
+    clEnqueueNDRangeKernel(queue, kernel, 2, NULL, globalWorkSize, localWorkSize, 0, NULL, NULL);
+    
+    // Read the result
+    clEnqueueReadBuffer(queue, bufferC, CL_TRUE, 0, MATRIX_SIZE * MATRIX_SIZE * sizeof(float), C, 0, NULL, NULL);
 
-    clEnqueueNDRangeKernel(queue, kernel, 2, NULL, globalWorkSize, NULL, 0, NULL, NULL);
-
-    // Wait for the kernel to finish
-    clFinish(queue);
-
-    // Read the result from the OpenCL buffer
-    clEnqueueReadBuffer(queue, bufferResult, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE*MATRIX_SIZE, result, 0, NULL, NULL);
-
-    // Cleanup
+    // Print the result
+    printf("Matrix multiplication result:\n");
+    for (int i = 0; i < MATRIX_SIZE*MATRIX_SIZE; i++) {
+        printf("%f ", C[i]);
+    }
+    printf("\n");
+    // print C_h
+    printf("Matrix multiplication result from host:\n");
+    for (int i = 0; i < MATRIX_SIZE*MATRIX_SIZE; i++) {
+        printf("%f ", C_h[i]);
+    }
+    printf("\n");
+    // Compare C with C_h
+    int correct = 1;
+    for (int i = 0; i < MATRIX_SIZE*MATRIX_SIZE; i++) {
+        if (C[i] != C_h[i]) {
+            correct = 0;
+        }
+    }
+    if (correct) {
+        printf("The result is correct.\n");
+    }
+    else {
+        printf("The result is incorrect.\n");
+    }
+    // Cleanup and release resources
     clReleaseMemObject(bufferA);
     clReleaseMemObject(bufferB);
-    clReleaseMemObject(bufferResult);
+    clReleaseMemObject(bufferC);
     clReleaseKernel(kernel);
     clReleaseProgram(program);
     clReleaseCommandQueue(queue);
     clReleaseContext(context);
-
-    // Print the result
-    printf("Vector addition result:\n");
-    for (int i = 0; i < MATRIX_SIZE*MATRIX_SIZE; i++) {
-        printf("%f ", result[i]);
-    }
-    printf("\n");
+    
+    free(A);
+    free(B);
+    free(C);
+    free(source);
 
     return 0;
 }

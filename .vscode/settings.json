@@ -57,7 +57,10 @@
   "C_Cpp_Runner.useLinkTimeOptimization": false,
   "C_Cpp_Runner.msvcSecureNoWarnings": false,
   "files.associations": {
-    "*.cl": "c"
+    "*.cl": "c",
+    "functional": "c",
+    "__locale": "c",
+    "random": "cpp"
   },
   "C_Cpp.default.compilerPath": "/usr/bin/gcc"
 }
