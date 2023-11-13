@@ -37,6 +37,14 @@ int main() {
                 char deviceName[128];
                 clGetDeviceInfo(devices[j], CL_DEVICE_NAME, sizeof(deviceName), deviceName, NULL);
                 printf("      Device %d: %s\n", j + 1, deviceName);
+                cl_uint max_work_item_dimensions;
+                size_t max_work_item_sizes[3]; // assuming maximum of 3 dimensions
+
+                clGetDeviceInfo(devices[j], CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS, sizeof(cl_uint), &max_work_item_dimensions, NULL);
+                clGetDeviceInfo(devices[j], CL_DEVICE_MAX_WORK_ITEM_SIZES, sizeof(size_t) * 3, max_work_item_sizes, NULL);
+
+                printf("Max work item dimensions: %u\n", max_work_item_dimensions);
+                printf("Max work item sizes: %zu, %zu, %zu\n", max_work_item_sizes[0], max_work_item_sizes[1], max_work_item_sizes[2]);
             }
 
             free(devices);
