@@ -4,25 +4,10 @@
 
 #define MATRIX_SIZE 800
 
-double get_event_exec_time(cl_event event)
-{
-    cl_ulong start_time, end_time;
-    /*Get start device counter for the event*/
-    clGetEventProfilingInfo(event,
-                            CL_PROFILING_COMMAND_START,
-                            sizeof(cl_ulong),
-                            &start_time,
-                            NULL);
-    /*Get end device counter for the event*/
-    clGetEventProfilingInfo(event,
-                            CL_PROFILING_COMMAND_END,
-                            sizeof(cl_ulong),
-                            &end_time,
-                            NULL);
-    /*Convert the counter values to milli seconds*/
-    double total_time = (double)(end_time - start_time);
-    return total_time;
-}
+void CL_CALLBACK eventCallback(cl_event event, cl_int event_command_exec_status, void* user_data) 
+    {
+    printf("The callback function was called!\n");
+    };
 // Function to read the content of a file into a string
 const char *readKernelSourceFromFile(const char *filename)
 {
@@ -123,17 +108,18 @@ int main()
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &bufferB);
     clSetKernelArg(kernel, 2, sizeof(int), &matrix_size);
     clSetKernelArg(kernel, 3, sizeof(cl_mem), &bufferResult);
-
+    
+    
     // Enqueue the OpenCL kernel for execution
     size_t globalWorkSize[2] = {MATRIX_SIZE, MATRIX_SIZE};
-    cl_event kernel_event1, kernel_event2;
+    cl_event kernel_event1;    
     clEnqueueNDRangeKernel(queue, kernel, 2, NULL, globalWorkSize, NULL, 0, NULL, &kernel_event1);
-    clEnqueueNDRangeKernel(queue, kernel, 2, NULL, globalWorkSize, NULL, 0, NULL, &kernel_event2);
     clFinish(queue);
-    double kernel1_time = get_event_exec_time(kernel_event1);
-    printf("kernel1 time: %f\n", kernel1_time);
-    double kernel2_time = get_event_exec_time(kernel_event2);
-    printf("kernel2 time: %f\n", kernel2_time);
+    cl_int status = clSetEventCallback(kernel_event1, CL_COMPLETE, eventCallback, NULL);
+    if (status != CL_SUCCESS) {
+        printf("Failed to set event callback\n");
+        return 1;
+    }
 
     // Read the result from the OpenCL buffer
     clEnqueueReadBuffer(queue, bufferResult, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, result, 0, NULL, NULL);
