@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <CL/cl.h>
 
-#define MATRIX_SIZE 4 // Adjust as needed
-#define TILE_SIZE 2    // Adjust the tile size as needed
+#define MATRIX_SIZE 128 // Adjust as needed
+#define TILE_SIZE 32    // Adjust the tile size as needed
 
 int main() {
     // Load OpenCL platform and create a context
@@ -60,8 +60,8 @@ int main() {
     
     // Initialize A and B matrices (you can replace this with your data)
     for (int i = 0; i < MATRIX_SIZE*MATRIX_SIZE; i++) {
-        A[i] = i;
-        B[i] = i;
+        A[i] = 1;
+        B[i] = 2;
     }
 
     // Multiply the above 2 matrices using C++
@@ -85,11 +85,14 @@ int main() {
     clEnqueueWriteBuffer(queue, bufferB, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE* MATRIX_SIZE, B, 0, NULL, NULL);
     
     // Set kernel arguments
+    size_t tileMemorySize = TILE_SIZE*TILE_SIZE*sizeof(float);
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &bufferA);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &bufferB);
     clSetKernelArg(kernel, 2, sizeof(cl_mem), &bufferC);
-    clSetKernelArg(kernel, 3, sizeof(int), &matrixSize);
-    clSetKernelArg(kernel, 4, sizeof(int), &tileSize);
+    clSetKernelArg(kernel, 3, tileMemorySize, NULL);
+    clSetKernelArg(kernel, 4, tileMemorySize, NULL);
+    clSetKernelArg(kernel, 5, sizeof(int), &matrixSize);
+    clSetKernelArg(kernel, 6, sizeof(int), &tileSize);
     
 
     // Execute the kernel
@@ -117,6 +120,8 @@ int main() {
     for (int i = 0; i < MATRIX_SIZE*MATRIX_SIZE; i++) {
         if (C[i] != C_h[i]) {
             correct = 0;
+            printf("The result is incorrect.C[i] = %f but C_h[i] = %f\n, where i is %i", C[i], C_h[i], i);
+            break;
         }
     }
     if (correct) {
