@@ -82,7 +82,8 @@ int main()
     cl_context context = clCreateContext(NULL, 1, &device, NULL, NULL, NULL);
 
     // Create a command queue
-    cl_command_queue queue = clCreateCommandQueue(context, device, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, NULL);
+    cl_command_queue queue1 = clCreateCommandQueue(context, device, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, NULL);
+    cl_command_queue queue2 = clCreateCommandQueue(context, device, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, NULL);
 
     // Create and compile the OpenCL program
     cl_program program = clCreateProgramWithSource(context, 1, &kernelSource, NULL, NULL);
@@ -102,8 +103,12 @@ int main()
     cl_mem bufferResult = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, NULL, NULL);
 
     // Write data to the OpenCL buffers
-    clEnqueueWriteBuffer(queue, bufferA, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, a, 0, NULL, NULL);
-    clEnqueueWriteBuffer(queue, bufferB, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, b, 0, NULL, NULL);
+    clEnqueueWriteBuffer(queue1, bufferA, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, a, 0, NULL, NULL);
+    clEnqueueWriteBuffer(queue1, bufferB, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, b, 0, NULL, NULL);
+
+    // Write data to the OpenCL buffers
+    clEnqueueWriteBuffer(queue2, bufferA, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, a, 0, NULL, NULL);
+    clEnqueueWriteBuffer(queue2, bufferB, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, b, 0, NULL, NULL);
 
     // Set kernel arguments
     clSetKernelArg(kernel1, 0, sizeof(cl_mem), &bufferA);
@@ -115,26 +120,27 @@ int main()
     // Enqueue the OpenCL kernel for execution
     size_t globalWorkSize[2] = {MATRIX_SIZE, MATRIX_SIZE};
     cl_event event1, event2;
-    clEnqueueNDRangeKernel(queue, kernel1, 2, NULL, globalWorkSize, NULL, 0, NULL, &event1);
+    clEnqueueNDRangeKernel(queue1, kernel1, 2, NULL, globalWorkSize, NULL, 0, NULL, &event1);
+    clFinish(queue1);
     
     // Kernel 2
     cl_mem bufferA1 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, NULL, NULL);
     cl_mem bufferB1 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, NULL, NULL);
     cl_mem bufferResult1 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, NULL, NULL);
-    clEnqueueWriteBuffer(queue, bufferA1, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, a, 0, NULL, NULL);
-    clEnqueueWriteBuffer(queue, bufferB1, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, b, 0, NULL, NULL);
+    clEnqueueWriteBuffer(queue2, bufferA1, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, a, 0, NULL, NULL);
+    clEnqueueWriteBuffer(queue2, bufferB1, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, b, 0, NULL, NULL);
     clSetKernelArg(kernel2, 0, sizeof(cl_mem), &bufferA1);
     clSetKernelArg(kernel2, 1, sizeof(cl_mem), &bufferB1);
     clSetKernelArg(kernel2, 2, sizeof(int), &matrix_size);
     clSetKernelArg(kernel2, 3, sizeof(cl_mem), &bufferResult1);
-    clEnqueueNDRangeKernel(queue, kernel2, 2, NULL, globalWorkSize, NULL, 0, NULL, &event2);
-    clFinish(queue);
+    clEnqueueNDRangeKernel(queue2, kernel2, 2, NULL, globalWorkSize, NULL, 0, NULL, &event2);
+    clFinish(queue2);
     end = clock();
     cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
     printf("Time taken for kernel execution: %f\n", cpu_time_used);
 
     // Read the result from the OpenCL buffer
-    clEnqueueReadBuffer(queue, bufferResult, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, result, 0, NULL, NULL);
+    clEnqueueReadBuffer(queue1, bufferResult, CL_TRUE, 0, sizeof(float) * MATRIX_SIZE * MATRIX_SIZE, result, 0, NULL, NULL);
 
     // Cleanup
     clReleaseMemObject(bufferA);
@@ -143,7 +149,7 @@ int main()
     clReleaseKernel(kernel1);
     clReleaseKernel(kernel2);
     clReleaseProgram(program);
-    clReleaseCommandQueue(queue);
+    clReleaseCommandQueue(queue1);
     clReleaseContext(context);
     // cpu kernel 
     float cpu_result[MATRIX_SIZE * MATRIX_SIZE];
